@@ -510,9 +510,28 @@
                         });
                     });
                     
-                    // Load default content
-                    if (menuItems.length > 0) {
-                        loadContent(menuItems[0].file);
+                    // Check for hash in URL and load appropriate content
+                    const hash = window.location.hash.substring(1);
+                    if (hash) {
+                        const menuItem = menuItems.find(item => 
+                            item.label.toLowerCase().replace(/\s+/g, '-') === hash
+                        );
+                        if (menuItem) {
+                            // Update active menu item
+                            document.querySelectorAll('.nav-link').forEach(link => {
+                                link.classList.remove('active');
+                            });
+                            document.querySelector(`[data-file="${menuItem.file}"]`).classList.add('active');
+                            loadContent(menuItem.file);
+                        } else {
+                            // Hash not found, load first item
+                            loadContent(menuItems[0].file);
+                        }
+                    } else {
+                        // No hash, load first menu item by default
+                        if (menuItems.length > 0) {
+                            loadContent(menuItems[0].file);
+                        }
                     }
                 })
                 .catch(error => {
@@ -524,17 +543,26 @@
         // Handle browser back/forward with hash changes
         window.addEventListener('hashchange', function() {
             const hash = window.location.hash.substring(1);
-            if (hash && menuData.length > 0) {
-                const menuItem = menuData.find(item => 
-                    item.label.toLowerCase().replace(/\s+/g, '-') === hash
-                );
-                if (menuItem) {
-                    // Update active menu item
-                    document.querySelectorAll('.nav-link').forEach((link, idx) => {
-                        link.classList.toggle('active', menuData[idx].file === menuItem.file);
+            if (hash) {
+                // Fetch menu data to find the correct item
+                fetch('menu.json')
+                    .then(response => response.json())
+                    .then(menuItems => {
+                        const menuItem = menuItems.find(item => 
+                            item.label.toLowerCase().replace(/\s+/g, '-') === hash
+                        );
+                        if (menuItem) {
+                            // Update active menu item
+                            document.querySelectorAll('.nav-link').forEach(link => {
+                                link.classList.remove('active');
+                            });
+                            document.querySelector(`[data-file="${menuItem.file}"]`).classList.add('active');
+                            loadContent(menuItem.file);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading menu for hash:', error);
                     });
-                    loadContent(menuItem.file);
-                }
             }
         });
 
@@ -578,14 +606,19 @@
                     });
                     document.querySelector(`[data-file="${file}"]`).classList.add('active');
                     
-                    // Update URL hash
+                    // Only update URL hash if there isn't already a valid hash
+                    const currentHash = window.location.hash.substring(1);
                     const menuItem = document.querySelector(`[data-file="${file}"]`);
                     const label = menuItem.textContent.trim();
-                    window.location.hash = label.toLowerCase().replace(/\s+/g, '-');
+                    const expectedHash = label.toLowerCase().replace(/\s+/g, '-');
+                    
+                    if (currentHash !== expectedHash) {
+                        window.location.hash = expectedHash;
+                    }
                     
                     // Check if there's a hash in URL and scroll to it
                     const hash = window.location.hash.substring(1);
-                    if (hash && hash !== label.toLowerCase().replace(/\s+/g, '-')) {
+                    if (hash && hash !== expectedHash) {
                         setTimeout(() => {
                             const targetElement = document.getElementById(hash);
                             if (targetElement) {
@@ -610,7 +643,6 @@
 
             // Find all links in the content that point to headers (start with #)
             const tocLinks = contentArea.querySelectorAll('a[href^="#"]');
-            
             tocLinks.forEach(link => {
                 const linkText = link.textContent.trim();
                 const targetId = link.getAttribute('href').substring(1);
@@ -620,9 +652,9 @@
                 
                 headers.forEach(header => {
                     const headerText = header.textContent.trim();
-                    
                     // If header text matches link text exactly, add the ID
-                    if (headerText === linkText && !header.id) {
+                    if (headerText.includes(linkText) && !header.id) {
+                        console.log(headerText, linkText)
                         header.id = targetId;
                     }
                 });
