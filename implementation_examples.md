@@ -25,7 +25,7 @@ lib/
 
 ## 🔧 Contoh Implementasi Lengkap
 
-### 1. Service Layer - TencentCallService
+### 1. Service Layer - TencentCallService dengan Error Handling
 
 ```dart
 // lib/services/tencent_call_service.dart
@@ -49,6 +49,57 @@ class TencentCallService {
 
   Stream<CallStatus> get callStatusStream => 
       _callStatusController?.stream ?? Stream.empty();
+
+  /// Get user-friendly error message based on the error
+  String getErrorMessage(dynamic error) {
+    String errorString = error.toString().toLowerCase();
+    
+    if (errorString.contains('-1001') || 
+        errorString.contains('not buy the basic call package') ||
+        errorString.contains('basic call package')) {
+      return 'Panggilan masih belum dapat dilakukan. Paket panggilan dasar belum dibeli.';
+    } else if (errorString.contains('-1002') || errorString.contains('network')) {
+      return 'Gagal melakukan panggilan. Periksa koneksi internet Anda.';
+    } else if (errorString.contains('-1003') || errorString.contains('permission')) {
+      return 'Gagal melakukan panggilan. Izin kamera atau mikrofon diperlukan.';
+    } else if (errorString.contains('-1004') || errorString.contains('login')) {
+      return 'Gagal melakukan panggilan. Silakan login ulang.';
+    } else if (errorString.contains('-1005') || errorString.contains('timeout')) {
+      return 'Panggilan timeout. Silakan coba lagi.';
+    } else if (errorString.contains('-1006') || errorString.contains('busy')) {
+      return 'Pengguna sedang sibuk. Silakan coba lagi nanti.';
+    } else if (errorString.contains('-1007') || errorString.contains('rejected')) {
+      return 'Panggilan ditolak oleh pengguna.';
+    } else if (errorString.contains('-1008') || errorString.contains('not found')) {
+      return 'Pengguna tidak ditemukan.';
+    } else {
+      return 'Gagal melakukan panggilan. Silakan coba lagi.';
+    }
+  }
+
+  /// Check if error is related to basic call package
+  bool isBasicCallPackageError(dynamic error) {
+    String errorString = error.toString().toLowerCase();
+    return errorString.contains('-1001') || 
+           errorString.contains('not buy the basic call package') ||
+           errorString.contains('basic call package');
+  }
+
+  /// Check if error is network related
+  bool isNetworkError(dynamic error) {
+    String errorString = error.toString().toLowerCase();
+    return errorString.contains('network') || 
+           errorString.contains('connection') ||
+           errorString.contains('timeout');
+  }
+
+  /// Check if error is permission related
+  bool isPermissionError(dynamic error) {
+    String errorString = error.toString().toLowerCase();
+    return errorString.contains('permission') || 
+           errorString.contains('camera') ||
+           errorString.contains('microphone');
+  }
 
   Future<bool> initialize() async {
     if (_isInitialized) {
@@ -82,6 +133,11 @@ class TencentCallService {
       log('Error initializing TencentCallService: $e');
       _isInitialized = false;
       _isLoggedIn = false;
+      
+      // Show appropriate error message
+      String errorMessage = getErrorMessage(e);
+      toast(errorMessage);
+      
       return false;
     }
   }
@@ -107,7 +163,8 @@ class TencentCallService {
     }
   }
 
-  Future<bool> makeCall({
+  /// Make a call with comprehensive error handling
+  Future<CallResult> makeCall({
     required List<String> userIds,
     required bool isVideo,
     Map<String, dynamic>? params,
@@ -115,7 +172,7 @@ class TencentCallService {
     try {
       final isLoggedIn = await checkLoginStatus();
       if (!isLoggedIn) {
-        throw Exception('Not logged in to TUICallKit');
+        return CallResult.error('Gagal menginisialisasi layanan panggilan');
       }
 
       log('Making ${isVideo ? 'video' : 'audio'} call to users: $userIds');
@@ -126,10 +183,45 @@ class TencentCallService {
         params,
       );
 
-      return true;
+      return CallResult.success();
     } catch (e) {
       log('Error making call: $e');
-      return false;
+      String errorMessage = getErrorMessage(e);
+      
+      // Show toast with error message
+      toast(errorMessage);
+      
+      return CallResult.error(errorMessage, error: e);
+    }
+  }
+
+  /// Make a call with legacy API (for backward compatibility)
+  Future<CallResult> makeCallLegacy({
+    required String userId,
+    required bool isVideo,
+  }) async {
+    try {
+      final isLoggedIn = await checkLoginStatus();
+      if (!isLoggedIn) {
+        return CallResult.error('Gagal menginisialisasi layanan panggilan');
+      }
+
+      log('Making ${isVideo ? 'video' : 'audio'} call to user: $userId');
+
+      await TUICallKit.instance.call(
+        userId,
+        isVideo ? TUICallMediaType.video : TUICallMediaType.audio,
+      );
+
+      return CallResult.success();
+    } catch (e) {
+      log('Error making call: $e');
+      String errorMessage = getErrorMessage(e);
+      
+      // Show toast with error message
+      toast(errorMessage);
+      
+      return CallResult.error(errorMessage, error: e);
     }
   }
 
@@ -145,6 +237,8 @@ class TencentCallService {
       return true;
     } catch (e) {
       log('Error joining call: $e');
+      String errorMessage = getErrorMessage(e);
+      toast(errorMessage);
       return false;
     }
   }
@@ -175,6 +269,11 @@ class TencentCallService {
     TUICallObserver observer = TUICallObserver(
       onError: (int code, String message) {
         log('Call Error: $code - $message');
+        
+        // Handle specific error codes
+        String userMessage = getErrorMessage('Error $code: $message');
+        toast(userMessage);
+        
         _callStatusController?.add(CallStatus.error(code, message));
       },
       onCallBegin: (TUIRoomId roomId, TUICallMediaType callMediaType, TUICallRole callRole) {
@@ -206,20 +305,38 @@ class TencentCallService {
     _isInitialized = false;
     _isLoggedIn = false;
   }
-
-  bool get isInitialized => _isInitialized;
-  bool get isLoggedIn => _isLoggedIn;
 }
 
-// Call Status Model
-class CallStatus {
-  final CallStatusType type;
-  final dynamic data;
+/// Result class for call operations
+class CallResult {
+  final bool success;
+  final String? message;
+  final dynamic error;
 
-  CallStatus(this.type, this.data);
+  CallResult._({required this.success, this.message, this.error});
+
+  factory CallResult.success([String? message]) {
+    return CallResult._(success: true, message: message);
+  }
+
+  factory CallResult.error(String message, {dynamic error}) {
+    return CallResult._(success: false, message: message, error: error);
+  }
+}
+
+/// Call status for stream updates
+class CallStatus {
+  final String type;
+  final Map<String, dynamic> data;
+
+  CallStatus._({required this.type, required this.data});
+
+  factory CallStatus.error(int code, String message) {
+    return CallStatus._(type: 'error', data: {'code': code, 'message': message});
+  }
 
   factory CallStatus.started(TUIRoomId roomId, TUICallMediaType mediaType, TUICallRole role) {
-    return CallStatus(CallStatusType.started, {
+    return CallStatus._(type: 'started', data: {
       'roomId': roomId,
       'mediaType': mediaType,
       'role': role,
@@ -227,39 +344,24 @@ class CallStatus {
   }
 
   factory CallStatus.ended(TUIRoomId roomId, double duration) {
-    return CallStatus(CallStatusType.ended, {
+    return CallStatus._(type: 'ended', data: {
       'roomId': roomId,
       'duration': duration,
     });
   }
 
+  factory CallStatus.networkQualityChanged(List<TUINetworkQualityInfo> qualityList) {
+    return CallStatus._(type: 'networkQuality', data: {'qualityList': qualityList});
+  }
+
   factory CallStatus.received(String callerId, List<String> calleeIds, String groupId, TUICallMediaType mediaType) {
-    return CallStatus(CallStatusType.received, {
+    return CallStatus._(type: 'received', data: {
       'callerId': callerId,
       'calleeIds': calleeIds,
       'groupId': groupId,
       'mediaType': mediaType,
     });
   }
-
-  factory CallStatus.error(int code, String message) {
-    return CallStatus(CallStatusType.error, {
-      'code': code,
-      'message': message,
-    });
-  }
-
-  factory CallStatus.networkQualityChanged(List<TUINetworkQualityInfo> qualityList) {
-    return CallStatus(CallStatusType.networkQualityChanged, qualityList);
-  }
-}
-
-enum CallStatusType {
-  started,
-  ended,
-  received,
-  error,
-  networkQualityChanged,
 }
 ```
 

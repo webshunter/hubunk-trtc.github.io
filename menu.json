@@ -20,6 +20,11 @@
     "file": "api_reference.md"
   },
   {
+    "label": "Error Handling",
+    "icon": "fa-exclamation-triangle",
+    "file": "error_handling_guide.md"
+  },
+  {
     "label": "Troubleshooting",
     "icon": "fa-tools",
     "file": "troubleshooting_guide.md"

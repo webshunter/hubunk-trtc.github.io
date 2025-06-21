@@ -40,7 +40,17 @@ Selamat datang di dokumentasi lengkap TUICallKit Flutter. Dokumentasi ini berisi
 - Observer API
 - Deprecated API
 
-### 4. [troubleshooting_guide.md](./troubleshooting_guide.md) - Panduan Troubleshooting
+### 4. [error_handling_guide.md](./error_handling_guide.md) - Panduan Penanganan Error
+**📖 Deskripsi:** Panduan lengkap penanganan error TUICallKit
+**🎯 Untuk:** Pengembang yang ingin menangani error dengan baik
+**📝 Isi:**
+- Error -1001: Paket Basic Call Belum Dibeli
+- Error Jaringan & Izin
+- Implementasi Error Handling
+- Best Practices
+- Testing Error Handling
+
+### 5. [troubleshooting_guide.md](./troubleshooting_guide.md) - Panduan Troubleshooting
 **📖 Deskripsi:** Solusi untuk masalah umum TUICallKit
 **🎯 Untuk:** Pengembang yang mengalami error atau masalah
 **📝 Isi:**
@@ -91,6 +101,11 @@ await TUICallKit.instance.calls(['user123'], TUICallMediaType.audio);
 2. Implementasi sesuai kebutuhan
 3. Gunakan contoh dari [implementation_examples.md](./implementation_examples.md)
 
+### Untuk Error Handling
+1. Cek [error_handling_guide.md](./error_handling_guide.md)
+2. Implementasi error handling yang sesuai
+3. Test dengan berbagai skenario error
+
 ### Untuk Troubleshooting
 1. Cek [troubleshooting_guide.md](./troubleshooting_guide.md)
 2. Identifikasi error code
@@ -132,6 +147,7 @@ await TUICallKit.instance.calls(['user123'], TUICallMediaType.audio);
 - ⚠️ API `call()`, `groupCall()`, `joinInGroupCall()` deprecated
 - 🆕 Fitur virtual background
 - 🆕 Enhanced error handling
+- 🆕 Error -1001 handling untuk paket basic call
 
 ### v2.9+
 - 🆕 Observer pattern untuk monitoring
@@ -150,6 +166,7 @@ Berdasarkan analisis proyek Anda:
 - ✅ **Service Layer:** `TencentCallService` sudah implement
 - ✅ **Login Flow:** Sudah terintegrasi dengan auth
 - ✅ **Call Launcher:** Widget untuk memulai panggilan sudah ada
+- ✅ **Error Handling:** Sudah diimplementasi untuk error -1001
 - ⚠️ **API Usage:** Masih menggunakan API lama (`call()`)
 - 🔧 **Recommendation:** Upgrade ke API baru (`calls()`)
 
@@ -178,6 +195,7 @@ Berdasarkan analisis proyek Anda:
 | **Mulai dari awal** | [README.md](./README.md) |
 | **Contoh kode** | [implementation_examples.md](./implementation_examples.md) |
 | **Referensi API** | [api_reference.md](./api_reference.md) |
+| **Error Handling** | [error_handling_guide.md](./error_handling_guide.md) |
 | **Troubleshooting** | [troubleshooting_guide.md](./troubleshooting_guide.md) |
 
 ---
