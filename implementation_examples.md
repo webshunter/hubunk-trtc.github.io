@@ -365,15 +365,16 @@ class CallStatus {
 }
 ```
 
-### 2. Widget Components
+### 2. Widget Components dengan Error Handling
 
-#### Call Launcher Widget
+#### Call Launcher Widget dengan Error Handling Lengkap
 
 ```dart
 // lib/widgets/tencent_call_launcher.dart
 import 'package:flutter/material.dart';
 import 'package:tencent_calls_uikit/tencent_calls_uikit.dart';
 import 'package:hub_unk/services/tencent_call_service.dart';
+import 'package:nb_utils/nb_utils.dart';
 
 class TencentCallLauncher extends StatefulWidget {
   final String userId;
@@ -381,6 +382,7 @@ class TencentCallLauncher extends StatefulWidget {
   final String? userName;
   final VoidCallback? onCallStarted;
   final VoidCallback? onCallFailed;
+  final Function(String)? onError;
 
   const TencentCallLauncher({
     Key? key,
@@ -389,6 +391,7 @@ class TencentCallLauncher extends StatefulWidget {
     this.userName,
     this.onCallStarted,
     this.onCallFailed,
+    this.onError,
   }) : super(key: key);
 
   @override
@@ -397,8 +400,9 @@ class TencentCallLauncher extends StatefulWidget {
 
 class _TencentCallLauncherState extends State<TencentCallLauncher> {
   bool _isInitializing = true;
-  bool _isCallStarted = false;
+  bool _isCallInProgress = false;
   String? _errorMessage;
+  final TencentCallService _callService = TencentCallService();
 
   @override
   void initState() {
@@ -408,31 +412,26 @@ class _TencentCallLauncherState extends State<TencentCallLauncher> {
 
   Future<void> _initializeCall() async {
     try {
-      final callService = TencentCallService();
-      
-      // Debug info
-      callService.debugPrintValues();
-      
-      final isLoggedIn = await callService.checkLoginStatus();
-      if (!isLoggedIn) {
-        setState(() {
-          _isInitializing = false;
-          _errorMessage = 'Failed to initialize call service';
-        });
-        widget.onCallFailed?.call();
-        return;
-      }
+      setState(() {
+        _isInitializing = true;
+        _errorMessage = null;
+      });
 
-      // Start the call
-      final success = await callService.makeCall(
-        userIds: [widget.userId],
+      // Debug print values before making call
+      _callService.debugPrintValues();
+
+      // Use the new makeCall method with error handling
+      final result = await _callService.makeCallLegacy(
+        userId: widget.userId,
         isVideo: widget.isVideo,
       );
 
-      if (success) {
+      if (result.success) {
         setState(() {
-          _isCallStarted = true;
+          _isInitializing = false;
+          _isCallInProgress = true;
         });
+        
         widget.onCallStarted?.call();
         
         // Close launcher after successful call initiation
@@ -442,17 +441,172 @@ class _TencentCallLauncherState extends State<TencentCallLauncher> {
       } else {
         setState(() {
           _isInitializing = false;
-          _errorMessage = 'Failed to start call';
+          _errorMessage = result.message;
         });
+        
         widget.onCallFailed?.call();
+        widget.onError?.call(result.message ?? 'Unknown error');
+        
+        // Show error dialog for specific errors
+        _showErrorDialog(result.message ?? 'Unknown error', result.error);
       }
     } catch (e) {
+      log('Unexpected error in TencentCallLauncher: $e');
       setState(() {
         _isInitializing = false;
-        _errorMessage = 'Error: $e';
+        _errorMessage = 'Terjadi kesalahan yang tidak terduga';
       });
+      
       widget.onCallFailed?.call();
+      widget.onError?.call('Terjadi kesalahan yang tidak terduga');
+      
+      if (mounted) {
+        _showErrorDialog('Terjadi kesalahan yang tidak terduga', e);
+      }
     }
+  }
+
+  void _showErrorDialog(String message, dynamic error) {
+    if (!mounted) return;
+
+    // Check if it's a basic call package error
+    bool isBasicCallPackageError = _callService.isBasicCallPackageError(error);
+    bool isNetworkError = _callService.isNetworkError(error);
+    bool isPermissionError = _callService.isPermissionError(error);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(
+                isBasicCallPackageError 
+                    ? Icons.payment 
+                    : isNetworkError 
+                        ? Icons.wifi_off 
+                        : isPermissionError 
+                            ? Icons.camera_alt 
+                            : Icons.error,
+                color: isBasicCallPackageError 
+                    ? Colors.orange 
+                    : isNetworkError 
+                        ? Colors.red 
+                        : isPermissionError 
+                            ? Colors.blue 
+                            : Colors.red,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isBasicCallPackageError 
+                    ? 'Paket Panggilan' 
+                    : isNetworkError 
+                        ? 'Koneksi Jaringan' 
+                        : isPermissionError 
+                            ? 'Izin Diperlukan' 
+                            : 'Error',
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(message),
+              if (isBasicCallPackageError) ...[
+                const SizedBox(height: 16),
+                const Text(
+                  'Untuk menggunakan fitur panggilan, Anda perlu:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                const Text('• Aktifkan paket basic call di Tencent Cloud Console'),
+                const Text('• Hubungi administrator untuk konfigurasi'),
+                const Text('• Pastikan akun memiliki izin panggilan'),
+              ],
+              if (isNetworkError) ...[
+                const SizedBox(height: 16),
+                const Text(
+                  'Solusi:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                const Text('• Periksa koneksi internet Anda'),
+                const Text('• Coba gunakan WiFi atau data seluler'),
+                const Text('• Restart aplikasi jika diperlukan'),
+              ],
+              if (isPermissionError) ...[
+                const SizedBox(height: 16),
+                const Text(
+                  'Solusi:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                const Text('• Izinkan akses kamera dan mikrofon'),
+                const Text('• Periksa pengaturan izin di aplikasi'),
+                const Text('• Restart aplikasi setelah memberikan izin'),
+              ],
+            ],
+          ),
+          actions: [
+            if (isBasicCallPackageError)
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context); // Close dialog
+                  Navigator.pop(context); // Close launcher
+                  // You can add navigation to settings or contact support
+                  toast('Hubungi administrator untuk mengaktifkan paket panggilan');
+                },
+                child: const Text('Hubungi Admin'),
+              ),
+            if (isNetworkError)
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context); // Close dialog
+                  _retryCall();
+                },
+                child: const Text('Coba Lagi'),
+              ),
+            if (isPermissionError)
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context); // Close dialog
+                  _requestPermissions();
+                },
+                child: const Text('Berikan Izin'),
+              ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context); // Close dialog
+                Navigator.pop(context); // Close launcher
+              },
+              child: const Text('Tutup'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _retryCall() async {
+    setState(() {
+      _isInitializing = true;
+      _errorMessage = null;
+    });
+    
+    // Wait a bit before retrying
+    await Future.delayed(const Duration(seconds: 2));
+    await _initializeCall();
+  }
+
+  Future<void> _requestPermissions() async {
+    // Implement permission request logic here
+    // You can use permission_handler package
+    toast('Mengarahkan ke pengaturan izin...');
+    
+    // For now, just retry the call
+    await _retryCall();
   }
 
   @override
@@ -469,38 +623,99 @@ class _TencentCallLauncherState extends State<TencentCallLauncher> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Memulai panggilan ${widget.isVideo ? 'video' : 'audio'}...',
-                style: const TextStyle(color: Colors.white),
+                'Memulai ${widget.isVideo ? 'panggilan video' : 'panggilan audio'}...',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                ),
               ),
               if (widget.userName != null) ...[
                 const SizedBox(height: 8),
                 Text(
                   'Kepada: ${widget.userName}',
-                  style: const TextStyle(color: Colors.white70),
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                  ),
                 ),
               ],
             ] else if (_errorMessage != null) ...[
-              const Icon(
+              Icon(
                 Icons.error_outline,
-                color: Colors.red,
-                size: 48,
+                color: Colors.red.shade300,
+                size: 64,
               ),
               const SizedBox(height: 16),
               Text(
-                _errorMessage!,
-                style: const TextStyle(color: Colors.white),
-                textAlign: TextAlign.center,
+                'Gagal Memulai Panggilan',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Text(
+                  _errorMessage!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _retryCall,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Coba Lagi'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  ElevatedButton.icon(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                    label: const Text('Tutup'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.grey,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ] else if (_isCallInProgress) ...[
+              const Icon(
+                Icons.call,
+                color: Colors.green,
+                size: 64,
               ),
               const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Tutup'),
+              const Text(
+                'Panggilan Dimulai',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ],
           ],
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
   }
 }
 ```
@@ -1082,3 +1297,425 @@ AppBar(
 
 **Status:** ✅ Production Ready  
 **Compatibility:** Flutter 3.0+, TUICallKit 3.1.1+ 
+
+## 1. Setup Dasar
+
+### Menambahkan Dependency
+```yaml
+dependencies:
+  tencent_calls_uikit: ^2.9.0
+```
+
+### Konfigurasi Android
+```gradle
+// android/app/build.gradle
+android {
+    defaultConfig {
+        multiDexEnabled true
+    }
+}
+
+// android/app/proguard-rules.pro
+-keep class com.tencent.** { *; }
+```
+
+### Konfigurasi iOS
+```xml
+<!-- ios/Runner/Info.plist -->
+<key>NSCameraUsageDescription</key>
+<string>Camera permission is required for video calls</string>
+<key>NSMicrophoneUsageDescription</key>
+<string>Microphone permission is required for calls</string>
+```
+
+## 2. Inisialisasi dan Login
+
+### Setup Navigator Observer
+```dart
+import 'package:tencent_calls_uikit/tencent_calls_uikit.dart';
+
+MaterialApp(
+  navigatorObservers: [TUICallKit.navigatorObserver],
+  // ... konfigurasi lainnya
+)
+```
+
+### Alur Inisialisasi Otomatis
+TencentCallService akan diinisialisasi secara otomatis saat pengguna masuk ke halaman beranda (TabsPage):
+
+```dart
+// Di lib/screens/tabs/tabs.page.dart
+class TabsPageState extends State<TabsPage> {
+  @override
+  void initState() {
+    super.initState();
+    // ... kode lainnya
+    _initializeTencentCallService();
+  }
+
+  /// Initialize TencentCallService when entering home page
+  Future<void> _initializeTencentCallService() async {
+    try {
+      final userId = getStringAsync('userId');
+      final userSig = getStringAsync('userSig');
+      
+      // Only initialize if we have the required credentials
+      if (userId.isNotEmpty && userSig.isNotEmpty) {
+        log('Initializing TencentCallService in TabsPage...');
+        final callService = TencentCallService();
+        final success = await callService.initialize();
+        
+        if (success) {
+          log('TencentCallService initialized successfully in TabsPage');
+        } else {
+          log('Failed to initialize TencentCallService in TabsPage');
+        }
+      } else {
+        log('TencentCallService credentials not available in TabsPage');
+      }
+    } catch (e) {
+      log('Error initializing TencentCallService in TabsPage: $e');
+    }
+  }
+}
+```
+
+### Login Manual (Opsional)
+Jika diperlukan, Anda juga dapat melakukan login manual:
+
+```dart
+import 'package:tencent_calls_uikit/tencent_calls_uikit.dart';
+import 'package:tencent_calls_uikit/debug/generate_test_user_sig.dart';
+
+class CallService {
+  static Future<bool> login() async {
+    try {
+      final String userID = 'user123';
+      final int sdkAppID = 1234567890;
+      final String secretKey = 'your_secret_key';
+      
+      String userSig = GenerateTestUserSig.genTestSig(userID, sdkAppID, secretKey);
+      
+      TUIResult result = await TUICallKit.instance.login(sdkAppID, userID, userSig);
+      
+      if (result.code.isEmpty) {
+        print('Login berhasil');
+        return true;
+      } else {
+        print('Login gagal: ${result.code} ${result.message}');
+        return false;
+      }
+    } catch (e) {
+      print('Error login: $e');
+      return false;
+    }
+  }
+}
+```
+
+## 3. Menampilkan Nama Pengguna pada Panggilan
+
+### Mengatur Informasi Pengguna
+```dart
+class TencentCallService {
+  /// Set user information in TUICallKit
+  Future<void> setUserInfo() async {
+    try {
+      final currentUser = getCurrentUserData();
+      if (currentUser != null) {
+        final displayName = getUserDisplayName(currentUser);
+        final avatarUrl = getUserAvatarUrl(currentUser);
+        
+        await TUICallKit.instance.setSelfInfo(displayName, avatarUrl);
+        print('Informasi pengguna berhasil diatur');
+      }
+    } catch (e) {
+      print('Error mengatur info pengguna: $e');
+    }
+  }
+
+  /// Get user display name
+  String getUserDisplayName(Usr? user) {
+    if (user == null) return 'Unknown User';
+    
+    if (user.firstName != null && 
+        user.firstName!.isNotEmpty && 
+        user.lastName != null && 
+        user.lastName!.isNotEmpty) {
+      return '${user.firstName} ${user.lastName}';
+    } else if (user.username != null && user.username!.isNotEmpty) {
+      return user.username!;
+    } else {
+      return 'Unknown User';
+    }
+  }
+
+  /// Get user avatar URL
+  String getUserAvatarUrl(Usr? user) {
+    if (user?.avatar != null && user!.avatar!.isNotEmpty) {
+      return user.avatar!;
+    }
+    return '';
+  }
+}
+```
+
+### Launcher dengan Nama Pengguna
+```dart
+class TencentCallLauncher extends StatelessWidget {
+  final String userId;
+  final bool isVideo;
+  final String? userName; // Nama pengguna yang dipanggil
+
+  const TencentCallLauncher({
+    Key? key,
+    required this.userId,
+    required this.isVideo,
+    this.userName,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black87,
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              isVideo ? Icons.videocam : Icons.call,
+              size: 80,
+              color: Colors.white,
+            ),
+            const SizedBox(height: 30),
+            
+            const CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
+            const SizedBox(height: 30),
+            
+            // Menampilkan nama pengguna
+            if (userName != null && userName!.isNotEmpty)
+              Text(
+                'Memanggil $userName...',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
+              )
+            else
+              Text(
+                'Memulai panggilan...',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            
+            const SizedBox(height: 10),
+            
+            Text(
+              isVideo ? 'Panggilan Video' : 'Panggilan Suara',
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 14,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+```
+
+### Menggunakan Launcher dengan Nama
+```dart
+// Dari halaman chat
+IconButton(
+  icon: const Icon(Icons.call),
+  onPressed: () async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TencentCallLauncher(
+          userId: chat.userId,
+          isVideo: false,
+          userName: "${chat.firstName} ${chat.lastName}",
+        ),
+      ),
+    );
+  },
+),
+```
+
+## 4. Melakukan Panggilan
+
+### Panggilan Audio
+```dart
+Future<void> makeAudioCall(String userId) async {
+  try {
+    await TUICallKit.instance.call(
+      userId,
+      TUICallMediaType.audio,
+    );
+    print('Panggilan audio dimulai');
+  } catch (e) {
+    print('Error panggilan audio: $e');
+  }
+}
+```
+
+### Panggilan Video
+```dart
+Future<void> makeVideoCall(String userId) async {
+  try {
+    await TUICallKit.instance.call(
+      userId,
+      TUICallMediaType.video,
+    );
+    print('Panggilan video dimulai');
+  } catch (e) {
+    print('Error panggilan video: $e');
+  }
+}
+```
+
+### Panggilan Grup
+```dart
+Future<void> makeGroupCall(List<String> userIds, bool isVideo) async {
+  try {
+    await TUICallKit.instance.calls(
+      userIds,
+      isVideo ? TUICallMediaType.video : TUICallMediaType.audio,
+    );
+    print('Panggilan grup dimulai');
+  } catch (e) {
+    print('Error panggilan grup: $e');
+  }
+}
+```
+
+## 5. Menangani Panggilan Masuk
+
+### Bergabung ke Panggilan
+```dart
+Future<void> joinCall(String callId) async {
+  try {
+    await TUICallKit.instance.join(callId);
+    print('Bergabung ke panggilan');
+  } catch (e) {
+    print('Error bergabung: $e');
+  }
+}
+```
+
+## 6. Monitoring Status Panggilan
+
+### Menambahkan Observer
+```dart
+TUICallObserver observer = TUICallObserver(
+  onError: (int code, String message) {
+    print('Error panggilan: $code - $message');
+  },
+  onCallBegin: (TUIRoomId roomId, TUICallMediaType callMediaType, TUICallRole callRole) {
+    print('Panggilan dimulai');
+  },
+  onCallEnd: (TUIRoomId roomId, TUICallMediaType callMediaType, TUICallRole callRole, double totalTime) {
+    print('Panggilan berakhir - Durasi: $totalTime detik');
+  },
+  onCallReceived: (String callerId, List<String> calleeIdList, String groupId, TUICallMediaType callMediaType) {
+    print('Panggilan masuk dari: $callerId');
+  }
+);
+
+// Menambahkan observer
+TUICallEngine.instance.addObserver(observer);
+```
+
+## 7. Fitur Tambahan
+
+### Mengatur Nada Dering Custom
+```dart
+await TUICallKit.instance.setCallingBell('assets/ringtone.mp3');
+```
+
+### Mengaktifkan Floating Window
+```dart
+await TUICallKit.instance.enableFloatWindow(true);
+```
+
+### Mengaktifkan Mode Mute Default
+```dart
+await TUICallKit.instance.enableMuteMode(true);
+```
+
+### Mengaktifkan Virtual Background
+```dart
+await TUICallKit.instance.enableVirtualBackground(true);
+```
+
+## 8. Error Handling
+
+### Menangani Error Paket Dasar
+```dart
+String getErrorMessage(dynamic error) {
+  String errorString = error.toString().toLowerCase();
+
+  if (errorString.contains('-1001') ||
+      errorString.contains('not buy the basic call package') ||
+      errorString.contains('basic call package')) {
+    return 'Panggilan masih belum dapat dilakukan. Paket panggilan dasar belum dibeli.';
+  } else if (errorString.contains('network') ||
+      errorString.contains('connection')) {
+    return 'Gagal melakukan panggilan. Periksa koneksi internet Anda.';
+  } else if (errorString.contains('permission') ||
+      errorString.contains('camera') ||
+      errorString.contains('microphone')) {
+    return 'Gagal melakukan panggilan. Izin kamera atau mikrofon diperlukan.';
+  } else {
+    return 'Gagal melakukan panggilan. Silakan coba lagi.';
+  }
+}
+```
+
+### Menampilkan Dialog Error
+```dart
+void showErrorDialog(BuildContext context, String message) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Error Panggilan'),
+      content: Text(message),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('OK'),
+        ),
+        TextButton(
+          onPressed: () {
+            Navigator.pop(context);
+            // Kontak admin atau retry
+          },
+          child: const Text('Kontak Admin'),
+        ),
+      ],
+    ),
+  );
+}
+```
+
+## 9. Best Practices
+
+1. **Selalu cek status login** sebelum melakukan panggilan
+2. **Tangani error dengan baik** dan berikan pesan yang user-friendly
+3. **Gunakan nama pengguna** untuk UX yang lebih baik
+4. **Simpan kredensial dengan aman** (jangan hardcode di aplikasi)
+5. **Test di berbagai device** untuk memastikan kompatibilitas
+6. **Monitor performa** dan kualitas jaringan
+7. **Implementasikan retry logic** untuk panggilan yang gagal 

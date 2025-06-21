@@ -15,6 +15,16 @@
     "file": "implementation_examples.md"
   },
   {
+    "label": "User Display Guide",
+    "icon": "fa-user",
+    "file": "user_display_guide.md"
+  },
+  {
+    "label": "Initialization Flow",
+    "icon": "fa-play",
+    "file": "initialization_flow.md"
+  },
+  {
     "label": "API Reference",
     "icon": "fa-cogs",
     "file": "api_reference.md"
