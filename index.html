@@ -571,20 +571,14 @@
             fetch(file)
                 .then(response => response.text())
                 .then(content => {
-                    document.getElementById('content').innerHTML = marked.parse(content);
-                    Prism.highlightAll();
+                    // Clear previous content
+                    const contentDiv = document.getElementById('content');
+                    contentDiv.innerHTML = '';
                     
-                    // Add IDs to headers based on table of contents links
-                    setTimeout(() => {  
-                        addIdsToHeaders();
-                    }, 100);
-                    
-                    // Scroll to top of the page
-                    window.scrollTo({
-                        top: 0,
-                        left: 0,
-                        behavior: 'smooth'
-                    });
+                    // Create a new div to hold the parsed HTML
+                    const newContent = document.createElement('div');
+                    newContent.innerHTML = marked.parse(content);
+                    contentDiv.appendChild(newContent);
                     
                     // Update page title and subtitle
                     const pageTitle = document.getElementById('page-title');
@@ -618,19 +612,35 @@
                         window.location.hash = expectedHash;
                     }
                     
-                    // Check if there's a hash in URL and scroll to it
-                    const hash = window.location.hash.substring(1);
-                    if (hash && hash !== expectedHash) {
-                        setTimeout(() => {
-                            const targetElement = document.getElementById(hash);
-                            if (targetElement) {
-                                targetElement.scrollIntoView({
-                                    behavior: 'smooth',
-                                    block: 'start'
-                                });
-                            }
-                        }, 100);
-                    }
+                    // Use setTimeout instead of requestAnimationFrame to ensure DOM is ready
+                    setTimeout(() => {
+                        // Add IDs to headers based on table of contents links
+                        addIdsToHeaders();
+                        
+                        // Highlight code blocks
+                        Prism.highlightAll();
+                        
+                        // Scroll to top of the page
+                        window.scrollTo({
+                            top: 0,
+                            left: 0,
+                            behavior: 'smooth'
+                        });
+                        
+                        // Check if there's a hash in URL and scroll to it
+                        const hash = window.location.hash.substring(1);
+                        if (hash && hash !== expectedHash) {
+                            setTimeout(() => {
+                                const targetElement = document.getElementById(hash);
+                                if (targetElement) {
+                                    targetElement.scrollIntoView({
+                                        behavior: 'smooth',
+                                        block: 'start'
+                                    });
+                                }
+                            }, 100);
+                        }
+                    }, 50);
                 })
                 .catch(error => {
                     console.error('Error loading content:', error);
@@ -645,6 +655,7 @@
 
             // Find all links in the content that point to headers (start with #)
             const tocLinks = contentArea.querySelectorAll('a[href^="#"]');
+            
             tocLinks.forEach(link => {
                 const linkText = link.textContent.trim();
                 const targetId = link.getAttribute('href').substring(1);
@@ -654,16 +665,13 @@
                 
                 headers.forEach(header => {
                     const headerText = header.textContent.trim();
-                    // If header text matches link text exactly, add the ID
+                    
+                    // If header text includes link text, add the ID
                     if (headerText.includes(linkText) && !header.id) {
-                        console.log(headerText, linkText)
                         header.id = targetId;
                     }
                 });
             });
-            
-            // Re-initialize internal link handling after adding IDs
-            handleInternalLinks();
         }
 
         // Mobile sidebar toggle
@@ -783,16 +791,6 @@
         document.addEventListener('DOMContentLoaded', function() {
             generateMenu();
             handleInternalLinks();
-            
-            // Handle hash routing after content is loaded
-            const hash = window.location.hash.substring(1);
-            if (hash) {
-                const menuItem = document.querySelector(`[data-file]`);
-                if (menuItem) {
-                    const file = menuItem.getAttribute('data-file');
-                    loadContent(file);
-                }
-            }
         });
     </script>
 </body>
