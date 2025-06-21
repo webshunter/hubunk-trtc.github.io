@@ -1,0 +1,27 @@
+[
+  {
+    "label": "Overview",
+    "icon": "fa-home",
+    "file": "INDEX.md"
+  },
+  {
+    "label": "Documentation",
+    "icon": "fa-book",
+    "file": "README.md"
+  },
+  {
+    "label": "Examples",
+    "icon": "fa-code",
+    "file": "implementation_examples.md"
+  },
+  {
+    "label": "API Reference",
+    "icon": "fa-cogs",
+    "file": "api_reference.md"
+  },
+  {
+    "label": "Troubleshooting",
+    "icon": "fa-tools",
+    "file": "troubleshooting_guide.md"
+  }
+] 
