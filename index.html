@@ -381,6 +381,57 @@
                 visibility: visible;
             }
         }
+
+        /* Smooth scrolling */
+        html {
+            scroll-behavior: smooth;
+        }
+
+        /* Internal link styling - only for content area */
+        .markdown-content a[href^="#"] {
+            color: #3498db;
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+
+        .markdown-content a[href^="#"]:hover {
+            color: #2980b9;
+            text-decoration: underline;
+        }
+
+        /* File link styling */
+        .markdown-content a[href$=".md"] {
+            color: #e74c3c;
+            text-decoration: none;
+            transition: color 0.3s ease;
+            font-weight: 500;
+        }
+
+        .markdown-content a[href$=".md"]:hover {
+            color: #c0392b;
+            text-decoration: underline;
+        }
+
+        /* Navbar links should keep their original styling */
+        .sidebar .nav-link {
+            color: #ecf0f1;
+            text-decoration: none;
+        }
+
+        .sidebar .nav-link:hover {
+            color: white;
+            text-decoration: none;
+        }
+
+        /* Target styling for smooth scroll */
+        .markdown-content h1,
+        .markdown-content h2,
+        .markdown-content h3,
+        .markdown-content h4,
+        .markdown-content h5,
+        .markdown-content h6 {
+            scroll-margin-top: 80px;
+        }
     </style>
 </head>
 <body>
@@ -495,6 +546,16 @@
                     document.getElementById('content').innerHTML = marked.parse(content);
                     Prism.highlightAll();
                     
+                    // Add IDs to headers based on table of contents links
+                    addIdsToHeaders();
+                    
+                    // Scroll to top of the page
+                    window.scrollTo({
+                        top: 0,
+                        left: 0,
+                        behavior: 'smooth'
+                    });
+                    
                     // Update page title and subtitle
                     const pageTitle = document.getElementById('page-title');
                     const pageSubtitle = document.getElementById('page-subtitle');
@@ -521,11 +582,54 @@
                     const menuItem = document.querySelector(`[data-file="${file}"]`);
                     const label = menuItem.textContent.trim();
                     window.location.hash = label.toLowerCase().replace(/\s+/g, '-');
+                    
+                    // Check if there's a hash in URL and scroll to it
+                    const hash = window.location.hash.substring(1);
+                    if (hash && hash !== label.toLowerCase().replace(/\s+/g, '-')) {
+                        setTimeout(() => {
+                            const targetElement = document.getElementById(hash);
+                            if (targetElement) {
+                                targetElement.scrollIntoView({
+                                    behavior: 'smooth',
+                                    block: 'start'
+                                });
+                            }
+                        }, 100);
+                    }
                 })
                 .catch(error => {
                     console.error('Error loading content:', error);
                     document.getElementById('content').innerHTML = '<h2>Error loading content</h2><p>Please try again later.</p>';
                 });
+        }
+
+        // Function to add IDs to headers based on table of contents links
+        function addIdsToHeaders() {
+            const contentArea = document.getElementById('content');
+            if (!contentArea) return;
+
+            // Find all links in the content that point to headers (start with #)
+            const tocLinks = contentArea.querySelectorAll('a[href^="#"]');
+            
+            tocLinks.forEach(link => {
+                const linkText = link.textContent.trim();
+                const targetId = link.getAttribute('href').substring(1);
+                
+                // Find all headers (h1, h2, h3, h4, h5, h6) in the content
+                const headers = contentArea.querySelectorAll('h1, h2, h3, h4, h5, h6');
+                
+                headers.forEach(header => {
+                    const headerText = header.textContent.trim();
+                    
+                    // If header text matches link text exactly, add the ID
+                    if (headerText === linkText && !header.id) {
+                        header.id = targetId;
+                    }
+                });
+            });
+            
+            // Re-initialize internal link handling after adding IDs
+            handleInternalLinks();
         }
 
         // Mobile sidebar toggle
@@ -585,8 +689,76 @@
             }
         });
 
+        // Handle internal links with scrollTo
+        function handleInternalLinks() {
+            // Remove existing listeners to prevent duplicates
+            document.removeEventListener('click', handleInternalLinkClick);
+            // Add new listener
+            document.addEventListener('click', handleInternalLinkClick);
+        }
+
+        // Separate function for the click handler
+        function handleInternalLinkClick(event) {
+            const target = event.target.closest('a');
+            if (target && target.getAttribute('href')) {
+                const href = target.getAttribute('href');
+                
+                // Check if the link is within the content area, not navbar
+                const contentArea = document.getElementById('content');
+                if (contentArea && contentArea.contains(target)) {
+                    
+                    // Handle internal anchor links (start with #)
+                    if (href.startsWith('#')) {
+                        event.preventDefault();
+                        const targetId = href.substring(1);
+                        const targetElement = document.getElementById(targetId);
+                        
+                        if (targetElement) {
+                            targetElement.scrollIntoView({
+                                behavior: 'smooth',
+                                block: 'start'
+                            });
+                        }
+                    }
+                    // Handle file links (end with .md)
+                    else if (href.endsWith('.md')) {
+                        event.preventDefault();
+                        const fileName = href;
+                        
+                        // Find the menu item that matches this file
+                        const menuItem = document.querySelector(`[data-file="${fileName}"]`);
+                        if (menuItem) {
+                            // Trigger click on the menu item
+                            menuItem.click();
+                            
+                            // Scroll to top after navigation
+                            setTimeout(() => {
+                                window.scrollTo({
+                                    top: 0,
+                                    left: 0,
+                                    behavior: 'smooth'
+                                });
+                            }, 100);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Initialize internal link handling
         document.addEventListener('DOMContentLoaded', function() {
             generateMenu();
+            handleInternalLinks();
+            
+            // Handle hash routing after content is loaded
+            const hash = window.location.hash.substring(1);
+            if (hash) {
+                const menuItem = document.querySelector(`[data-file]`);
+                if (menuItem) {
+                    const file = menuItem.getAttribute('data-file');
+                    loadContent(file);
+                }
+            }
         });
     </script>
 </body>
